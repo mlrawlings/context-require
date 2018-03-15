@@ -1,8 +1,7 @@
 <h1 align="center">
   <!-- Logo -->
-  <br/>
   context-require
-	<br/>
+  <br/>
 
   <!-- Stability -->
   <a href="https://nodejs.org/api/documentation.html#documentation_stability_index">
