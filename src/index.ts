@@ -4,18 +4,20 @@ import * as path from "path";
 import * as builtinModules from "builtins";
 
 const BUILTIN: string[] = builtinModules();
-const EXT_NAME = ".in-context";
 let moduleId = 0;
 
 /**
  * Patch nodejs module system to support context,
  * compilation and module resolution overrides.
  */
+const originalLoad = (Module as any)._load;
 const originalResolve = (Module as any)._resolveFilename;
 const originalCompile = (Module.prototype as any)._compile;
-require.extensions[EXT_NAME] = requireHook;
+const originalProtoLoad = (Module.prototype as any).load;
+(Module as any)._load = loadFile;
 (Module as any)._resolveFilename = resolveFileHook;
 (Module.prototype as any)._compile = compileHook;
+(Module.prototype as any).load = protoLoad;
 
 // Expose module.
 module.exports = exports = createContextRequire;
@@ -25,42 +27,43 @@ export namespace Types {
   export type compileFunction = (module: Module, filename: string) => any;
   export type resolveFunction = (from: string, request: string) => string;
   export interface RequireFunction {
-    <T=any>(id: string) : T;
-    resolve(id: string) : string;
-}
-  export interface Hooks { [x:string]: Types.compileFunction };
+    <T = any>(id: string): T;
+    resolve(id: string): string;
+  }
+  export interface Hooks {
+    [x: string]: Types.compileFunction;
+  }
   export interface Options {
     /** The directory from which to resolve requires for this module. */
-    dir: string,
+    dir: string;
     /** A vm context which will be used as the context for any required modules. */
-    context: any,
+    context: any;
     /** A function to which will override the native module resolution. */
-    resolve?: resolveFunction,
+    resolve?: resolveFunction;
     /** An object containing any context specific require hooks to be used in this module. */
-    extensions?: Hooks
+    extensions?: Hooks;
   }
 }
 
 export class ContextModule extends Module {
-  public _postfix: string;
   public _context: any;
+  public _cache: any;
   public _resolve?: Types.resolveFunction;
   public _hooks?: Types.Hooks;
 
   /**
    * Custom nodejs Module implementation which uses a provided
-   * resolver, require hooks, and context. 
+   * resolver, require hooks, and context.
    */
   constructor({ dir, context, resolve, extensions }: Types.Options) {
-    const postfix =  `.${moduleId++}${EXT_NAME}`;
-    const filename = path.join(dir, `index${postfix}`);
+    const filename = path.join(dir, `index.${moduleId++}.ctx`);
     super(filename);
 
     this.filename = filename;
-    this._postfix = postfix;
     this._context = context;
     this._resolve = resolve;
     this._hooks = extensions;
+    this._cache = {};
 
     if (!vm.isContext(context) && typeof context.runVMScript !== "function") {
       vm.createContext(context);
@@ -71,8 +74,34 @@ export class ContextModule extends Module {
 /**
  * Creates a custom Module object which runs all required scripts in a provided vm context.
  */
-function createContextRequire (options: Types.Options) {
+function createContextRequire(options: Types.Options) {
   return createRequire(new ContextModule(options));
+}
+
+/**
+ * Use custom require cache for context modules
+ *
+ * @param request The file to resolve.
+ * @param parentModule The module requiring this file.
+ * @param isMain
+ */
+function loadFile(
+  request: string,
+  parentModule: Module | ContextModule,
+  isMain: boolean
+): string {
+  const isNotBuiltin = BUILTIN.indexOf(request) === -1;
+  const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
+
+  if (contextModule) {
+    const originalCache = (Module as any)._cache;
+    (Module as any)._cache = contextModule._cache;
+    const result = originalLoad(request, parentModule, isMain);
+    (Module as any)._cache = originalCache;
+    return result;
+  }
+
+  return originalLoad(request, parentModule, isMain);
 }
 
 /**
@@ -81,35 +110,31 @@ function createContextRequire (options: Types.Options) {
  * @param request The file to resolve.
  * @param parentModule The module requiring this file.
  */
-function resolveFileHook (request: string, parentModule: Module|ContextModule): string {
+function resolveFileHook(
+  request: string,
+  parentModule: Module | ContextModule
+): string {
   const isNotBuiltin = BUILTIN.indexOf(request) === -1;
   const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
 
   if (contextModule) {
-    const postfix = contextModule._postfix;
-
-    if (request.indexOf(postfix, request.length - postfix.length) !== -1) {
-      // Skip resolving if we already match the in-context extension.
-      return request;
-    }
-
     const resolver = contextModule._resolve;
 
     if (resolver) {
       // Normalize paths for custom resolvers.
       const dir = path.dirname(parentModule.filename);
-    
+
       if (path.isAbsolute(request)) {
         request = path.relative(dir, request);
 
         if (request[0] !== ".") {
-          request = "./" + request; 
+          request = "./" + request;
         }
       }
 
-      return resolver(dir, request) + postfix;
+      return resolver(dir, request);
     } else {
-      return originalResolve(request, parentModule) + postfix;
+      return originalResolve(request, parentModule);
     }
   }
 
@@ -117,19 +142,25 @@ function resolveFileHook (request: string, parentModule: Module|ContextModule): 
 }
 
 /**
- * Require hook which removes module postfix and uses custom extensions if provided.
+ * Patch module.load to use the context's custom extensions if provided.
  *
- * @param module
- * @param filename 
+ * @param filename
  */
-function requireHook (module, filename) {
-  const contextModule = findNearestContextModule(module) as ContextModule;
-  const postfix = contextModule._postfix;
-  const extensions = contextModule._hooks;
-  filename = filename.slice(0, -postfix.length);
-  const ext = path.extname(filename);
-  const compiler = (extensions && extensions[ext]) || require.extensions[ext] || require.extensions[".js"];
-  return compiler(module, filename);
+function protoLoad(filename) {
+  const contextModule = findNearestContextModule(this) as ContextModule;
+  if (contextModule) {
+    const extensions = contextModule._hooks;
+    const ext = path.extname(filename);
+    const compiler = extensions && extensions[ext];
+    if (compiler) {
+      const originalCompiler = (Module as any)._extensions[ext];
+      (Module as any)._extensions[ext] = compiler;
+      const result = originalProtoLoad.apply(this, arguments);
+      (Module as any)._extensions[ext] = originalCompiler;
+      return result;
+    }
+  }
+  return originalProtoLoad.apply(this, arguments);
 }
 
 /**
@@ -138,9 +169,13 @@ function requireHook (module, filename) {
  * @param content The file contents of the script.
  * @param filename The filename for the script.
  */
-function compileHook (this: Module|ContextModule, content: string, filename: string) {
+function compileHook(
+  this: Module | ContextModule,
+  content: string,
+  filename: string
+) {
   const contextModule = findNearestContextModule(this);
-  
+
   if (contextModule) {
     const context = contextModule._context;
     const script = new vm.Script(Module.wrap(content), {
@@ -167,12 +202,12 @@ function compileHook (this: Module|ContextModule, content: string, filename: str
  *
  * @param cur The starting module.
  */
-function findNearestContextModule (cur: Module): ContextModule|void {
+function findNearestContextModule(cur: Module): ContextModule | void {
   do {
     if (cur instanceof ContextModule) {
       return cur;
     }
-  } while (Boolean(cur = cur.parent));
+  } while (Boolean((cur = cur.parent)));
 }
 
 /**
@@ -182,7 +217,7 @@ function findNearestContextModule (cur: Module): ContextModule|void {
  * @param context The vm context to run the script in (or a jsdom instance).
  * @param script The vm script to run.
  */
-function runScript (context: any, script: vm.Script) {
+function runScript(context: any, script: vm.Script) {
   return context.runVMScript
     ? context.runVMScript(script)
     : script.runInContext(context);
@@ -194,7 +229,7 @@ function runScript (context: any, script: vm.Script) {
  *
  * @param module The module to create a require function for.
  */
-function createRequire (module: Module): Types.RequireFunction {
+function createRequire(module: Module): Types.RequireFunction {
   const require = module.require.bind(module);
   require.resolve = request => resolveFileHook(request, module);
   return require;
