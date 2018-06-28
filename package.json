@@ -1,7 +1,7 @@
 {
   "name": "context-require",
   "description": "Allows you to require files in a custom vm context.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Michael Rawlings <ml.rawlings@gmail.com>",
   "maintainers": [
     "Michael Rawlings <ml.rawlings@gmail.com>",
