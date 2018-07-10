@@ -96,9 +96,11 @@ function loadFile(
   if (contextModule) {
     const originalCache = (Module as any)._cache;
     (Module as any)._cache = contextModule._cache;
-    const result = originalLoad(request, parentModule, isMain);
-    (Module as any)._cache = originalCache;
-    return result;
+    try {
+      return originalLoad(request, parentModule, isMain);
+    } finally {
+      (Module as any)._cache = originalCache;
+    }
   }
 
   return originalLoad(request, parentModule, isMain);
@@ -155,9 +157,11 @@ function protoLoad(filename) {
     if (compiler) {
       const originalCompiler = (Module as any)._extensions[ext];
       (Module as any)._extensions[ext] = compiler;
-      const result = originalProtoLoad.apply(this, arguments);
-      (Module as any)._extensions[ext] = originalCompiler;
-      return result;
+      try {
+        return originalProtoLoad.apply(this, arguments);
+      } finally {
+        (Module as any)._extensions[ext] = originalCompiler;
+      }
     }
   }
   return originalProtoLoad.apply(this, arguments);
