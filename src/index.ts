@@ -12,6 +12,7 @@ let moduleId = 0;
  */
 const originalLoad = (Module as any)._load;
 const originalResolve = (Module as any)._resolveFilename;
+const originalCache = (Module as any)._cache;
 const originalCompile = (Module.prototype as any)._compile;
 const originalProtoLoad = (Module.prototype as any).load;
 (Module as any)._load = loadFile;
@@ -92,18 +93,13 @@ function loadFile(
 ): string {
   const isNotBuiltin = BUILTIN.indexOf(request) === -1;
   const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
-
-  if (contextModule) {
-    const originalCache = (Module as any)._cache;
-    (Module as any)._cache = contextModule._cache;
-    try {
-      return originalLoad(request, parentModule, isMain);
-    } finally {
-      (Module as any)._cache = originalCache;
-    }
+  const previousCache = (Module as any)._cache;
+  (Module as any)._cache = contextModule ? contextModule._cache : originalCache;
+  try {
+    return originalLoad(request, parentModule, isMain);
+  } finally {
+    (Module as any)._cache = previousCache;
   }
-
-  return originalLoad(request, parentModule, isMain);
 }
 
 /**
