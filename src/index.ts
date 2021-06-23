@@ -220,7 +220,9 @@ function findNearestContextModule(cur: Module): ContextModule | void {
 function runScript(context: any, script: vm.Script) {
   return context.runVMScript
     ? context.runVMScript(script)
-    : script.runInContext(context);
+    : script.runInContext(
+        context.getInternalVMContext ? context.getInternalVMContext() : context
+      );
 }
 
 /**

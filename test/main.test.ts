@@ -13,7 +13,7 @@ describe("require-in-context", () => {
 
     assert.deepEqual(moduleExports, {
       fromGlobal: context.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
       file: "a"
     });
   });
@@ -27,17 +27,18 @@ describe("require-in-context", () => {
 
     assert.deepEqual(moduleExports, {
       fromGlobal: context.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
       file: "a"
     });
   });
 
-  it("should support jsdom style runVMScript context", () => {
+  it("should support old jsdom style runVMScript context", () => {
     const dir = __dirname;
     const hiddenContext = { fromGlobal: "hello" };
+    vm.createContext(hiddenContext);
     const context = {
       runVMScript(script: vm.Script) {
-        return script.runInNewContext(hiddenContext);
+        return script.runInContext(hiddenContext);
       }
     };
     vm.createContext(context);
@@ -46,7 +47,27 @@ describe("require-in-context", () => {
 
     assert.deepEqual(moduleExports, {
       fromGlobal: hiddenContext.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
+      file: "a"
+    });
+  });
+
+  it("should support new jsdom style runVMScript context", () => {
+    const dir = __dirname;
+    const hiddenContext = { fromGlobal: "hello" };
+    vm.createContext(hiddenContext);
+    const context = {
+      getInternalVMContext() {
+        return hiddenContext;
+      }
+    };
+    vm.createContext(context);
+    const browserRequire = createRequire({ dir, context });
+    const moduleExports = browserRequire("./fixtures/a");
+
+    assert.deepEqual(moduleExports, {
+      fromGlobal: hiddenContext.fromGlobal,
+      global: "undefined",
       file: "a"
     });
   });
@@ -64,7 +85,7 @@ describe("require-in-context", () => {
   it("should rerequire in a new context", () => {
     const dir = __dirname;
     const contextA = { fromGlobal: "a" };
-    const contextB = { fromGlobal: "b"}
+    const contextB = { fromGlobal: "b" };
     const browserRequireA = createRequire({ dir, context: contextA });
     const moduleExportsA = browserRequireA("./fixtures/a");
     const browserRequireB = createRequire({ dir, context: contextB });
@@ -73,12 +94,12 @@ describe("require-in-context", () => {
     assert.notDeepEqual(moduleExportsA, moduleExportsB);
     assert.deepEqual(moduleExportsA, {
       fromGlobal: contextA.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
       file: "a"
     });
     assert.deepEqual(moduleExportsB, {
       fromGlobal: contextB.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
       file: "a"
     });
   });
@@ -91,12 +112,12 @@ describe("require-in-context", () => {
 
     assert.deepEqual(moduleExports, {
       fromGlobal: context.fromGlobal,
-      global: 'undefined',
+      global: "undefined",
       file: "b"
     });
 
     // Resolver to remap a => b
-    function resolve (from: string, request: string) {
+    function resolve(from: string, request: string) {
       assert.equal(from, dir);
       assert.equal(request, "./fixtures/a");
       return path.join(from, "./fixtures/b.js");
@@ -114,7 +135,7 @@ describe("require-in-context", () => {
     assert.equal(moduleExports.f.b, browserRequire("./fixtures/b"));
 
     // Resolver to remap a => b
-    function resolve (from: string, request: string) {
+    function resolve(from: string, request: string) {
       assert.ok(fs.statSync(from).isDirectory());
 
       if (request.indexOf(".js", request.length - 3) === -1) {
@@ -129,7 +150,10 @@ describe("require-in-context", () => {
     const dir = __dirname;
     const context = {};
     const browserRequire = createRequire({ dir, context });
-    assert.throws(() => browserRequire("./fixtures/c.txt"), "SyntaxError: Unexpected identifier");
+    assert.throws(
+      () => browserRequire("./fixtures/c.txt"),
+      "SyntaxError: Unexpected identifier"
+    );
   });
 
   it("should support adding custom require hooks", () => {
@@ -139,12 +163,15 @@ describe("require-in-context", () => {
       ".txt": (module, filename) => {
         module.exports = fs.readFileSync(filename, "utf-8");
       }
-    }
+    };
     const browserRequire = createRequire({ dir, context, extensions });
     assert.equal(browserRequire("./fixtures/c.txt"), "some text\n");
 
     // doesn't change global hooks.
-    assert.throws(() => require("./fixtures/c.txt"), "SyntaxError: Unexpected identifier");
+    assert.throws(
+      () => require("./fixtures/c.txt"),
+      "SyntaxError: Unexpected identifier"
+    );
   });
 
   it("should support nested requires", () => {
