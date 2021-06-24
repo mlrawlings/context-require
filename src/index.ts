@@ -101,16 +101,9 @@ function loadFile(
     return originalLoad(request, parentModule, isMain);
   }
 
-  const relResolveCacheKey = `${(contextModule as any).path}\x00${request}`;
-  const cached =
-    contextModule._cache[
-      contextModule._relativeResolveCache[relResolveCacheKey] ||
-        (contextModule._relativeResolveCache[
-          relResolveCacheKey
-        ] = resolveFileHook(request, parentModule))
-    ];
+  const cached = contextModule._cache[resolveFileHook(request, parentModule)];
   if (cached) {
-    if (parentModule.children.indexOf(cached) !== -1) {
+    if (parentModule.children.indexOf(cached) === -1) {
       parentModule.children.push(cached);
     }
 
@@ -155,7 +148,14 @@ function resolveFileHook(
         }
       }
 
-      return resolver(dir, request);
+      const relResolveCacheKey = `${dir}\x00${request}`;
+      return (
+        contextModule._relativeResolveCache[relResolveCacheKey] ||
+        (contextModule._relativeResolveCache[relResolveCacheKey] = resolver(
+          dir,
+          request
+        ))
+      );
     } else {
       return originalResolve(request, parentModule);
     }
