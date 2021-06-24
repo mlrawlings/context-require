@@ -1,9 +1,7 @@
 import Module = require("module");
 import * as vm from "vm";
 import * as path from "path";
-import * as builtinModules from "builtins";
 
-const BUILTIN: string[] = builtinModules();
 let moduleId = 0;
 
 /**
@@ -12,7 +10,6 @@ let moduleId = 0;
  */
 const originalLoad = (Module as any)._load;
 const originalResolve = (Module as any)._resolveFilename;
-const originalCache = (Module as any)._cache;
 const originalCompile = (Module.prototype as any)._compile;
 const originalProtoLoad = (Module.prototype as any).load;
 (Module as any)._load = loadFile;
@@ -49,6 +46,7 @@ export namespace Types {
 export class ContextModule extends Module {
   public _context: any;
   public _cache: any;
+  public _relativeResolveCache: Record<string, string>;
   public _resolve?: Types.resolveFunction;
   public _hooks?: Types.Hooks;
 
@@ -65,6 +63,7 @@ export class ContextModule extends Module {
     this._resolve = resolve;
     this._hooks = extensions;
     this._cache = {};
+    this._relativeResolveCache = {};
 
     if (
       !vm.isContext(context) &&
@@ -95,10 +94,32 @@ function loadFile(
   parentModule: Module | ContextModule,
   isMain: boolean
 ): string {
-  const isNotBuiltin = BUILTIN.indexOf(request) === -1;
+  const isNotBuiltin = Module.builtinModules.indexOf(request) === -1;
   const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
+
+  if (!contextModule) {
+    return originalLoad(request, parentModule, isMain);
+  }
+
+  const relResolveCacheKey = `${(contextModule as any).path}\x00${request}`;
+  const cached =
+    contextModule._cache[
+      contextModule._relativeResolveCache[relResolveCacheKey] ||
+        (contextModule._relativeResolveCache[
+          relResolveCacheKey
+        ] = resolveFileHook(request, parentModule))
+    ];
+  if (cached) {
+    if (parentModule.children.indexOf(cached) !== -1) {
+      parentModule.children.push(cached);
+    }
+
+    return cached.exports;
+  }
+
   const previousCache = (Module as any)._cache;
-  (Module as any)._cache = contextModule ? contextModule._cache : originalCache;
+  (Module as any)._cache = contextModule._cache;
+
   try {
     return originalLoad(request, parentModule, isMain);
   } finally {
@@ -116,7 +137,7 @@ function resolveFileHook(
   request: string,
   parentModule: Module | ContextModule
 ): string {
-  const isNotBuiltin = BUILTIN.indexOf(request) === -1;
+  const isNotBuiltin = Module.builtinModules.indexOf(request) === -1;
   const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
 
   if (contextModule) {
