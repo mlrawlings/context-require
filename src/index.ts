@@ -66,7 +66,11 @@ export class ContextModule extends Module {
     this._hooks = extensions;
     this._cache = {};
 
-    if (!vm.isContext(context) && typeof context.runVMScript !== "function") {
+    if (
+      !vm.isContext(context) &&
+      typeof context.runVMScript !== "function" &&
+      typeof context.getInternalVMContext !== "function"
+    ) {
       vm.createContext(context);
     }
   }
