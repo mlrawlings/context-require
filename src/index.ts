@@ -29,7 +29,7 @@ export namespace Types {
     resolve(id: string): string;
   }
   export interface Hooks {
-    [x: string]: Types.compileFunction;
+    [x: string]: Types.compileFunction | undefined;
   }
   export interface Options {
     /** The directory from which to resolve requires for this module. */
