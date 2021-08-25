@@ -26,6 +26,9 @@ export namespace Types {
   export type resolveFunction = (from: string, request: string) => string;
   export interface RequireFunction {
     <T = any>(id: string): T;
+    main: typeof require.main;
+    cache: typeof require.cache;
+    extensions: Partial<typeof require.extensions>;
     resolve(id: string): string;
   }
   export interface Hooks {
