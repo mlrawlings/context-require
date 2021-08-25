@@ -79,7 +79,8 @@ export class ContextModule extends Module {
  * Creates a custom Module object which runs all required scripts in a provided vm context.
  */
 function createContextRequire(options: Types.Options) {
-  return createRequire(new ContextModule(options));
+  const module = new ContextModule(options);
+  return createRequire(module, module);
 }
 
 /**
@@ -212,7 +213,7 @@ function compileHook(
     return runScript(context, script).call(
       this.exports,
       this.exports,
-      createRequire(this),
+      createRequire(this, contextModule),
       this,
       filename,
       path.dirname(filename)
@@ -252,12 +253,18 @@ function runScript(context: any, script: vm.Script) {
 
 /**
  * Creates a require function bound to a module
- * and adds a `resolve` function the same as nodejs.
+ * and adds a `resolve` function and `cache` object the same as nodejs.
  *
  * @param module The module to create a require function for.
  */
-function createRequire(module: Module): Types.RequireFunction {
-  const require = module.require.bind(module);
-  require.resolve = request => resolveFileHook(request, module);
-  return require;
+function createRequire(
+  module: Module,
+  context: ContextModule
+): Types.RequireFunction {
+  const req = module.require.bind(module);
+  req.resolve = request => resolveFileHook(request, module);
+  req.main = require.main;
+  req.cache = context._cache;
+  req.extensions = context._hooks || require.extensions;
+  return req;
 }
