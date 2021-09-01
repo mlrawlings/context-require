@@ -95,11 +95,13 @@ function createContextRequire(options: Types.Options) {
  */
 function loadFile(
   request: string,
-  parentModule: Module | ContextModule,
+  parentModule: Module | ContextModule | undefined,
   isMain: boolean
 ): string {
-  const isNotBuiltin = Module.builtinModules.indexOf(request) === -1;
-  const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
+  const canLoadInContext =
+    parentModule && Module.builtinModules.indexOf(request) === -1;
+  const contextModule =
+    canLoadInContext && findNearestContextModule(parentModule);
 
   if (!contextModule) {
     return originalLoad(request, parentModule, isMain);
@@ -132,10 +134,12 @@ function loadFile(
  */
 function resolveFileHook(
   request: string,
-  parentModule: Module | ContextModule
+  parentModule: Module | ContextModule | undefined
 ): string {
-  const isNotBuiltin = Module.builtinModules.indexOf(request) === -1;
-  const contextModule = isNotBuiltin && findNearestContextModule(parentModule);
+  const canLoadInContext =
+    parentModule && Module.builtinModules.indexOf(request) === -1;
+  const contextModule =
+    canLoadInContext && findNearestContextModule(parentModule);
 
   if (contextModule) {
     const resolver = contextModule._resolve;
