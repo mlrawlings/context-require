@@ -23,7 +23,11 @@ export default createContextRequire;
 
 export namespace Types {
   export type compileFunction = (module: Module, filename: string) => any;
-  export type resolveFunction = (from: string, request: string) => string;
+  export type resolveFunction = (
+    from: string,
+    request: string,
+    parent: Module
+  ) => string;
   export interface RequireFunction {
     <T = any>(id: string): T;
     main: typeof require.main;
@@ -161,7 +165,8 @@ function resolveFileHook(
         contextModule._relativeResolveCache[relResolveCacheKey] ||
         (contextModule._relativeResolveCache[relResolveCacheKey] = resolver(
           dir,
-          request
+          request,
+          parentModule
         ))
       );
     } else {

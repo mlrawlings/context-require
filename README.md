@@ -58,7 +58,7 @@ const browserRequire = createRequire({
   dir: __dirname,
   context: new JSDOM('<div>Hello World</div>').window, // This object becomes the context for any required files.
   extensions: ..., // Same as require.extensions but only used in the above context.
-  resolve(from, request) {...} // Override file resolution for this context.
+  resolve(from, request, parentModule) {...} // Override file resolution for this context.
 });
 
 browserRequire("./get-document-body").innerHTML; // <div>Hello World</div>
