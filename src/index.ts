@@ -3,6 +3,9 @@ import * as vm from "vm";
 import * as path from "path";
 
 let moduleId = 0;
+const isBuiltin =
+  (Module as any).isBuiltin ||
+  ((id: string) => Module.builtinModules.indexOf(id) !== -1);
 
 /**
  * Patch nodejs module system to support context,
@@ -102,8 +105,7 @@ function loadFile(
   parentModule: Module | ContextModule | undefined,
   isMain: boolean
 ): string {
-  const canLoadInContext =
-    parentModule && Module.builtinModules.indexOf(request) === -1;
+  const canLoadInContext = parentModule && !isBuiltin(request);
   const contextModule =
     canLoadInContext && findNearestContextModule(parentModule);
 
