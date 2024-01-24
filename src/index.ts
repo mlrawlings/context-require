@@ -6,6 +6,9 @@ let moduleId = 0;
 const isBuiltin =
   (Module as any).isBuiltin ||
   ((id: string) => Module.builtinModules.indexOf(id) !== -1);
+const runScriptOptions: vm.RunningScriptOptions = {
+  displayErrors: true,
+};
 
 /**
  * Patch nodejs module system to support context,
@@ -29,7 +32,7 @@ export namespace Types {
   export type resolveFunction = (
     from: string,
     request: string,
-    parent: Module
+    parent: Module,
   ) => string;
   export interface RequireFunction {
     <T = any>(id: string): T;
@@ -103,7 +106,7 @@ function createContextRequire(options: Types.Options) {
 function loadFile(
   request: string,
   parentModule: Module | ContextModule | undefined,
-  isMain: boolean
+  isMain: boolean,
 ): string {
   const canLoadInContext = parentModule && !isBuiltin(request);
   const contextModule =
@@ -140,7 +143,7 @@ function loadFile(
  */
 function resolveFileHook(
   request: string,
-  parentModule: Module | ContextModule | undefined
+  parentModule: Module | ContextModule | undefined,
 ): string {
   const canLoadInContext =
     parentModule && Module.builtinModules.indexOf(request) === -1;
@@ -168,7 +171,7 @@ function resolveFileHook(
         (contextModule._relativeResolveCache[relResolveCacheKey] = resolver(
           dir,
           request,
-          parentModule
+          parentModule,
         ))
       );
     } else {
@@ -212,7 +215,7 @@ function protoLoad(filename) {
 function compileHook(
   this: Module | ContextModule,
   content: string,
-  filename: string
+  filename: string,
 ) {
   const contextModule = findNearestContextModule(this);
 
@@ -221,7 +224,6 @@ function compileHook(
     const script = new vm.Script(Module.wrap(content), {
       filename,
       lineOffset: 0,
-      displayErrors: true
     });
 
     return runScript(context, script).call(
@@ -230,7 +232,7 @@ function compileHook(
       createRequire(this, contextModule),
       this,
       filename,
-      path.dirname(filename)
+      path.dirname(filename),
     );
   }
 
@@ -259,9 +261,10 @@ function findNearestContextModule(cur: Module): ContextModule | void {
  */
 function runScript(context: any, script: vm.Script) {
   return context.runVMScript
-    ? context.runVMScript(script)
+    ? context.runVMScript(script, runScriptOptions)
     : script.runInContext(
-        context.getInternalVMContext ? context.getInternalVMContext() : context
+        context.getInternalVMContext ? context.getInternalVMContext() : context,
+        runScriptOptions,
       );
 }
 
@@ -273,10 +276,10 @@ function runScript(context: any, script: vm.Script) {
  */
 function createRequire(
   module: Module,
-  context: ContextModule
+  context: ContextModule,
 ): Types.RequireFunction {
   const req = module.require.bind(module);
-  req.resolve = request => resolveFileHook(request, module);
+  req.resolve = (request) => resolveFileHook(request, module);
   req.main = require.main;
   req.cache = context._cache;
   req.extensions = context._hooks || require.extensions;
