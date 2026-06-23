@@ -18,6 +18,7 @@ const originalLoad = (Module as any)._load;
 const originalResolve = (Module as any)._resolveFilename;
 const originalCompile = (Module.prototype as any)._compile;
 const originalProtoLoad = (Module.prototype as any).load;
+const defaultModuleCache = (Module as any)._cache;
 (Module as any)._load = loadFile;
 (Module as any)._resolveFilename = resolveFileHook;
 (Module.prototype as any)._compile = compileHook;
@@ -113,7 +114,14 @@ function loadFile(
     canLoadInContext && findNearestContextModule(parentModule);
 
   if (!contextModule) {
-    return originalLoad(request, parentModule, isMain);
+    const previousCache = (Module as any)._cache;
+    (Module as any)._cache = defaultModuleCache;
+
+    try {
+      return originalLoad(request, parentModule, isMain);
+    } finally {
+      (Module as any)._cache = previousCache;
+    }
   }
 
   const cached = contextModule._cache[resolveFileHook(request, parentModule)];
